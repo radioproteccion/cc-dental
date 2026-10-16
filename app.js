@@ -47,6 +47,7 @@ var OFFLINE = {
       ' · ' + (navigator.onLine ? 'con conexión' : '<span style="color:#FFEB9C">sin conexión</span>') +
       ' · <span' + (n ? ' style="color:#FFEB9C;font-weight:700"' : '') + '>' + n + ' control(es) pendiente(s) de enviar</span>' + (bor ? ' · ' + bor + ' borrador(es) por subir' : '') +
       (PAQUETE && edad > 30 ? ' · <span style="color:#FFC7CE;font-weight:700">datos caducados: sincronice con wifi</span>' : '') +
+      (OFFLINE.recargar ? ' <button type="button" onclick="guardarBorrador(); location.reload()" style="background:#FFEB9C;color:#000;font-weight:700;border-color:#FFEB9C">⟳ Datos nuevos: recargar ahora</button>' : '') +
       ' <button type="button" onclick="OFFLINE.verAgenda()">📅 Agenda</button> <button type="button" onclick="OFFLINE.sincronizar(true)">🔄 Sincronizar</button> <button type="button" onclick="OFFLINE.configurar()">⚙</button>' +
       (OFFLINE.enCurso ? ' <i>sincronizando…</i>' : '');
   },
@@ -68,6 +69,8 @@ var OFFLINE = {
     siguiente().then(paquete).then(function (nuevo) {
       OFFLINE.enCurso = false; OFFLINE.barra();
       if (enviados) aviso('<b>✔ ' + enviados + ' control(es) enviado(s) a la oficina.</b>', true);
+      if (nuevo && !hayDatos() && !COLA.leer().length) { location.reload(); return; }   // nada escrito: se recarga sola con los datos nuevos
+      if (nuevo) { OFFLINE.recargar = true; OFFLINE.barra(); window.scrollTo(0, 0); }   // botón destacado en la barra fija de arriba (siempre visible)
       if (nuevo) preguntar('Datos de la tablet actualizados (' + (PAQUETE.datosDe || PAQUETE.generado) + '). Para usarlos hay que recargar la página' + (hayDatos() ? ' (lo escrito queda guardado en la tablet)' : '') + '.', [['Recargar ahora', function () { guardarBorrador(); location.reload(); }], ['Más tarde', function () { }]]);
       else if (manual && !enviados) aviso('Sincronizado: no había nada pendiente y los datos ya estaban al día.', true);
     }, function (e) {
