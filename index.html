@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<base target="_top">
+<title>CC dental · control de calidad</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#1F4E78">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icono.png">
+<style>
+  :root { --azul:#1F4E78; --azulc:#DDEBF7; --gris:#F2F2F2; --borde:#BFBFBF; --verde:#E2EFDA; --rojo:#C00000; }
+  * { box-sizing:border-box; }
+  body { font-family:Segoe UI, Arial, sans-serif; margin:0; background:#fafafa; color:#222; font-size:14px; }
+  header { background:var(--azul); color:#fff; padding:12px 18px; }
+  header h1 { margin:0; font-size:19px; } header p { margin:4px 0 0; font-size:12px; opacity:.85; }
+  main { max-width:1100px; margin:0 auto; padding:14px; }
+  .tarjeta { background:#fff; border:1px solid var(--borde); border-radius:6px; padding:12px 14px; margin-bottom:14px; }
+  .tarjeta h2 { margin:0 0 10px; font-size:16px; color:var(--azul); display:flex; justify-content:space-between; align-items:center; }
+  .tarjeta h3 { margin:12px 0 6px; font-size:14px; color:var(--azul); }
+  .fila { display:flex; flex-wrap:wrap; gap:10px 14px; }
+  .campo { display:flex; flex-direction:column; min-width:120px; }
+  .campo label { font-size:12px; color:#555; margin-bottom:2px; }
+  .campo.ancho { flex:1 1 320px; }
+  input, select, textarea { font:inherit; padding:5px 6px; border:1px solid var(--borde); border-radius:4px; background:#fff; }
+  input.num { width:82px; text-align:right; }
+  textarea { width:100%; min-height:44px; }
+  table { border-collapse:collapse; width:100%; }
+  th { background:var(--gris); font-size:12px; font-weight:600; padding:4px; border:1px solid var(--borde); }
+  td { border:1px solid var(--borde); padding:2px; text-align:center; }
+  td input, td select { width:100%; border:0; padding:4px; }
+  td input.num { width:100%; }
+  .tabla { overflow-x:auto; }
+  button { font:inherit; cursor:pointer; border-radius:4px; border:1px solid var(--azul); background:#fff; color:var(--azul); padding:5px 10px; }
+  button.primario { background:var(--azul); color:#fff; font-weight:600; padding:9px 18px; font-size:15px; }
+  button.quitar { border-color:#bbb; color:#888; padding:2px 7px; }
+  .acciones { display:flex; gap:10px; margin:6px 0 2px; flex-wrap:wrap; }
+  .aviso { padding:10px 12px; border-radius:5px; margin:10px 0; display:none; }
+  .aviso.ok { background:var(--verde); color:#1e5c1e; display:block; }
+  .aviso.mal { background:#FFC7CE; color:#9C0006; display:block; }
+  .ayuda { font-size:12px; color:#666; margin:2px 0 8px; }
+  .pie { text-align:center; margin:18px 0 30px; }
+  /* código de colores del libro Excel (13/10/2026) */
+  input.lec, select.lec { background:#FFF2CC; }                 /* amarillo: lectura para rellenar */
+  input.sug, select.sug, textarea.sug { background:#E2EFDA; }   /* verde: sugerido del control anterior */
+  input.cambiado, select.cambiado { background:#BDD7EE; }       /* azul: cambiado respecto al sugerido */
+  .falta { background:#F8CBAD !important; }                     /* naranja: falta un dato */
+  .violeta { background:#E4D7F5 !important; }                   /* violeta: lectura muy distinta de la anterior */
+  .ant { display:block; font-size:11px; color:#808080; text-align:right; padding:0 3px; }   /* gris: lectura anterior */
+  .leyenda { font-size:12px; margin:0 0 8px; } .leyenda span { padding:1px 6px; border-radius:3px; margin-right:4px; border:1px solid #ddd; }
+  #estado { position:sticky; bottom:0; z-index:5; padding:8px 12px; border-radius:5px; margin:8px 0; font-weight:600; }
+  #estado.mal { background:#F8CBAD; color:#843C0C; } #estado.bien { background:#C6EFCE; color:#006100; } #estado:empty { display:none; }
+  /* informe provisional (como la hoja Informe del libro Excel) */
+  .inf table { margin-bottom:10px; } .inf td { text-align:left; padding:4px 6px; font-size:13px; } .inf td.c { text-align:center; white-space:nowrap; }
+  .inf h3 { display:flex; justify-content:space-between; } .r { font-weight:700; border-radius:3px; padding:1px 6px; }
+  .r.CONFORME, .r.APTO { background:#C6EFCE; color:#006100; } .r.NO_CONFORME, .r.NO_APTO { background:#FFC7CE; color:#9C0006; }
+  .r.PENDIENTE, .r.INCOMPLETO { background:#FFEB9C; color:#9C5700; } .r.INFORMATIVO { background:#EDEDED; color:#404040; }
+  .hoja { border:1px solid #BFBFBF; padding:14px 16px; margin:0 0 14px; background:#fff; font-family:Arial, Helvetica, sans-serif; font-size:11px; color:#000; }
+  .hoja .cab { display:flex; align-items:center; gap:16px; margin-bottom:12px; } .hoja .cab img { width:110px; height:auto; }
+  .hoja .cab .t { flex:1; text-align:center; } .hoja .cab .tit { color:#1F4E78; font-weight:700; font-size:17px; } .hoja .cab .sub { font-style:italic; font-size:10.5px; margin-top:3px; } .hoja .cab .ent { font-size:10.5px; margin-top:6px; }
+  .hoja table { border-collapse:collapse; width:100%; margin:0 0 10px; }
+  .hoja table td, .hoja table th { border:1px solid #808080; padding:2px 5px; font-size:10.5px; text-align:left; vertical-align:middle; background:#fff; }
+  .hoja .sec td { background:#1F4E78; color:#fff; font-weight:700; border-color:#1F4E78; text-transform:uppercase; }
+  .hoja thead th, .hoja .cols th { background:#1F4E78; color:#fff; font-weight:700; text-align:center; border-color:#1F4E78; }
+  .hoja td.et { font-weight:700; width:24%; } .hoja td.c, .hoja th.c { text-align:center; } .hoja td.b { font-weight:700; }
+  .hoja tr.det td { font-size:9.5px; font-style:italic; border-top-color:#D9D9D9; border-bottom-color:#D9D9D9; } .hoja tr.det td.res { font-style:normal; }
+  .hoja td.res { text-align:center; font-weight:700; } .hoja td.CONFORME, .hoja td.APTO, .hoja td.Correcto { background:#C6EFCE; color:#006100; }
+  .hoja td.NO_CONFORME, .hoja td.NO_APTO, .hoja td.Incorrecto { background:#FFC7CE; color:#9C0006; } .hoja td.PENDIENTE, .hoja td.INCOMPLETO { background:#FFEB9C; color:#9C5700; }
+  .hoja td.NO_APLICA, .hoja td.NO_PROCEDE, .hoja td.NO_VALORADO, .hoja td.NO_VALORADA, .hoja td.INFORMATIVO { background:#EDEDED; color:#595959; } .hoja tr.det td.Correcto, .hoja tr.det td.Incorrecto { font-weight:400; }
+  .hoja .glob td { font-weight:700; font-size:11.5px; } .hoja .glob td.et { background:#F2F2F2; width:auto; }
+  .hoja .ley { font-size:9.5px; font-style:italic; color:#595959; margin:6px 0 10px; } .hoja .txt { font-size:10.5px; margin:10px 0; }
+  .hoja .firmas { display:flex; gap:40px; margin-top:22px; font-size:11px; } .hoja .firmas div { flex:1; } .hoja .firmas .lin { border-bottom:1px solid #808080; height:34px; margin-bottom:3px; }
+  /* PDF del informe (13/10/2026): al imprimir solo salen las hojas del informe, una por página A4, como el PDF del libro Excel */
+  @media print {
+    @page { size: A4; margin: 14mm 12mm; }
+    body { background:#fff; font-size:11px; } header, #estado, #aviso, .pie, .acciones, main > .tarjeta:not(#informe), #equipos, #salas, #informe > h2, #informe > .ayuda, #informe > .acciones { display:none !important; }
+    main { max-width:none; padding:0; } #informe { border:0; padding:0; margin:0; }
+    .hoja { border:0; padding:0; margin:0; page-break-after:always; break-after:page; } .hoja:last-child { page-break-after:auto; break-after:auto; }
+    .hoja h4 { -webkit-print-color-adjust:exact; print-color-adjust:exact; } .hoja th, .r { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    .hoja table { page-break-inside:auto; } .hoja tr { page-break-inside:avoid; }
+    @page { @bottom-left { content: "Informe de control de calidad"; font: 8px Arial; } @bottom-right { content: "Página " counter(page) " de " counter(pages); font: 8px Arial; } }
+  }
+  .pdfpie { display:none; }
+  /* avisos y preguntas al elegir la instalación (15/10/2026: justo debajo de la instalación y bien visibles) */
+  .cargando { font-size:14px; color:#1F4E78; margin:8px 0 2px; } .cargando:empty { display:none; }
+  .cargando.pregunta { background:#FFF2CC; border:2px solid #BF8F00; border-radius:6px; padding:12px 14px; font-size:15px; }
+  .cargando.pregunta b { display:block; margin-bottom:8px; color:#7F6000; }
+  .cargando.pregunta button { font-size:15px; padding:8px 16px; margin:6px 10px 0 0; font-weight:600; }
+  .cargando.pregunta button:first-of-type { background:#1F4E78; color:#fff; }
+  .desc { font-weight:normal; font-size:13px; color:#555; margin-left:8px; flex:1; }
+  /* versión sin conexión (16/10/2026): barra de estado, agenda y configuración */
+  #offbar { position:sticky; top:0; z-index:20; background:#16365C; color:#fff; padding:6px 12px; font-size:13px; }
+  #offbar button { margin-left:6px; padding:3px 9px; border-color:#fff; }
+  #offagenda .cita { border:1px solid var(--borde); border-radius:5px; padding:8px 10px; margin:6px 0; cursor:pointer; background:#fff; }
+  #offagenda .cita:hover { background:var(--azulc); } #offagenda .cita span { font-size:12px; color:#555; }
+  #offcfg { position:fixed; top:0; left:0; right:0; bottom:0; z-index:50; background:rgba(0,0,0,.45); padding:40px 12px; overflow:auto; }
+  #offcfg .tarjeta { max-width:760px; margin:0 auto; background:#fff; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Control de calidad dental</h1>
+  <p>Se guarda en la cuenta de la empresa; la oficina lo pasa a la base de datos con «Recibir de tablet». Decimales con coma o punto (el punto se convierte en coma). Flechas e Intro para pasar de casilla. Lo que no se use, en blanco.</p>
+</header>
+<main>
+  <div class="tarjeta">
+    <h2>Identificación del control</h2>
+    <div class="fila">
+      <div class="campo ancho"><label>Instalación (escriba el código o el nombre y elija)</label>
+        <input id="inst" list="lista-inst" placeholder="p. ej. GSSUGVIZ" autocomplete="off" onchange="pedirAnteriores()" oninput="if (INSTALACIONES.indexOf(this.value) >= 0) pedirAnteriores()"><datalist id="lista-inst"></datalist><datalist id="lista-eq"></datalist></div>
+      <div class="campo"><label>Fecha del control</label><input id="fecha" type="date"></div>
+      <div class="campo"><label>Técnico</label><select id="tecnico" onchange="aplicarTecnico()"></select></div>
+      <input id="medidor" type="hidden">
+    </div>
+    <div id="cargando" class="cargando"></div>
+    <div id="cabinst" class="ayuda" style="margin:8px 0;font-size:13px;color:#333"></div>
+    <div class="fila">
+      <div class="campo"><label>Nº de control en el año</label><input id="ncontrol" class="num" inputmode="numeric" title="1 = revisión programada; 2, 3… = controles extraordinarios del mismo año"></div>
+      <div class="campo ancho"><label>Motivo del control</label><input id="motivo" list="lista-motivo"><datalist id="lista-motivo"><option value="Revisión anual programada"><option value="Control inicial (alta del equipo)"><option value="Tras reparación o cambio de componentes"><option value="Otro"></datalist></div>
+    </div>
+    <h3>Instrumentación</h3>
+    <div class="fila">
+      <div class="campo ancho"><label>Multímetro (marca / modelo)</label><input id="mmarca"></div>
+      <div class="campo"><label>Nº de serie</label><input id="mserie"></div>
+      <div class="campo"><label>Última calibración</label><input id="mfc"></div>
+      <div class="campo ancho"><label>Maniquí de calidad de imagen</label><input id="maniqui"></div>
+    </div>
+    <div class="fila">
+      <div class="campo ancho"><label>Monitor de radiación (marca / modelo)</label><input id="omarca"></div>
+      <div class="campo"><label>Nº de serie</label><input id="oserie"></div>
+      <div class="campo"><label>Última calibración</label><input id="ofc"></div>
+    </div>
+    <div class="campo" style="margin-top:8px"><label>Observaciones generales para el informe</label><textarea id="obsgen"></textarea></div>
+    <p class="ayuda">Si van dos personas al mismo control, cada una puede enviar su parte (una los equipos, otra las salas): en la base se juntan.</p>
+    <p class="leyenda">Colores: <span style="background:#E2EFDA">verde</span>sugerido del control anterior · <span style="background:#BDD7EE">azul</span>cambiado ·
+      <span style="background:#FFF2CC">amarillo</span>lectura · <span style="background:#F8CBAD">naranja</span>falta ·
+      <span style="background:#E4D7F5">violeta</span>muy distinta de la anterior · <span style="color:#808080">gris</span>lectura anterior</p>
+  </div>
+
+  <div id="equipos"></div>
+  <div class="acciones"><button type="button" onclick="nuevoEquipo()">+ equipo</button></div>
+
+  <div id="salas"></div>
+  <div class="acciones"><button type="button" onclick="nuevaSala()">+ sala (niveles de radiación)</button></div>
+
+  <div class="tarjeta inf" id="informe"><h2>Informe provisional (como la hoja Informe del libro Excel) <span id="global"></span></h2>
+    <p class="ayuda">Se calcula solo, con las tolerancias del libro Excel (PECCRD 2011). Es orientativo: el informe oficial es el de la base de datos.</p>
+    <div class="acciones"><button type="button" onclick="imprimirInforme()">🖨 Imprimir / guardar PDF del informe</button></div>
+    <div id="inf-cuerpo"></div>
+    </div>
+  <div id="estado"></div>
+  <div id="aviso" class="aviso"></div>
+  <div class="pie"><button type="button" id="guardarG" onclick="guardarEnGoogle(true)" style="margin-right:14px;padding:9px 16px" title="Guarda el control tal como está, sin enviarlo, para continuarlo después desde cualquier ordenador">💾 Guardar sin enviar</button><button type="button" class="primario" id="enviar" onclick="enviar()">Enviar el control</button>
+    <p class="ayuda" id="guardado" style="margin-top:6px"></p>
+    <div id="preg-enviar" class="cargando" style="text-align:left;max-width:700px;margin:8px auto"></div>
+    <p class="ayuda" style="margin-top:14px">Versión de la página: 16/10/2026 (33) · sin ventanas emergentes · módulo de conexión · borrador por técnico · completar control · fecha de la cita · avisos bajo la instalación · borradores solo con lecturas · preguntas en la página · borradores por instalación · CHR con tasas · instrumento único · D4 · DL015 con un disparo · equipo que no funciona · salas tras su equipo · 4 disparos · sin receptor digital · panorámicos P1–P6 · disparos D1–D4 · DX12–DX15 · DL015 · identificación completa · pruebas analógicas / digitales: NO PROCEDE · el informe solo lleva las pruebas realizadas</p></div>
+</main>
+
+<script src="cargador.js?v=16102026-33.2"></script>
+
+</body>
+</html>
