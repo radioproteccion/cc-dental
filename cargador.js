@@ -3,7 +3,7 @@
 // datos (IndexedDB: instalaciones, instrumentos, controles anteriores y agenda) y 3) carga la página (app.js, generada a
 // partir de appscript/CC_Web.html con el módulo de conexión sin conexión).
 (function () {
-  var VERSION = '16102026-33.3';
+  var VERSION = '16102026-33.4';
   function abrir() {
     return new Promise(function (ok, ko) {
       var r = indexedDB.open('cc_dental', 1);

@@ -61,8 +61,16 @@ var OFFLINE = {
       var x = l[0], p = x.tipo === 'enviar' ? llamarApi({ accion: 'enviar', json: x.json }) : x.tipo === 'borrador' ? llamarApi({ accion: 'guardarBorrador', cod: x.cod, json: x.json, tec: x.tec }) : llamarApi({ accion: 'borrarBorrador', cod: x.cod, tec: x.tec });
       return p.then(function () { if (x.tipo === 'enviar') enviados++; COLA.guardar(COLA.leer().slice(1)); OFFLINE.barra(); return siguiente(); });
     };
+    var url = function (q) { return CFG.api + (CFG.api.indexOf('?') < 0 ? '?' : '&') + q + '&clave=' + encodeURIComponent(CFG.clave); };
     var paquete = function () {
-      if (!manual && PAQUETE && OFFLINE.edadDias() < 0.5) return Promise.resolve(false);   // se renueva como mucho cada 12 h salvo a mano
+      // 17/10/2026: al abrir con conexión pregunta a Google la fecha de sus datos y solo descarga si son más nuevos que los de
+      // la tablet (gasta muy poco también con el móvil); si la puerta de entrada no lo sabe responder, regla antigua de 12 h
+      if (!manual && PAQUETE) return fetch(url('accion=estado')).then(function (r) { return r.json(); })
+        .then(function (e) { return e && !e.error && e.datosDe ? e.datosDe : null; }, function () { return null; })
+        .then(function (d) { return d === null ? (OFFLINE.edadDias() < 0.5 ? false : descargar()) : (d > (PAQUETE.datosDe || '') ? descargar() : false); });
+      return descargar();
+    };
+    var descargar = function () {
       return fetch(CFG.api + (CFG.api.indexOf('?') < 0 ? '?' : '&') + 'accion=paquete&tablet=' + encodeURIComponent(CFG.tablet) + '&clave=' + encodeURIComponent(CFG.clave))
         .then(function (r) { return r.json(); }).then(function (p) { if (p.error) throw new Error(p.error); return CCDB.guardar('paquete', p).then(function () { var nuevo = !PAQUETE || PAQUETE.generado !== p.generado; PAQUETE = window.PAQUETE = p; return nuevo; }); });
     };
