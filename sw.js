@@ -1,7 +1,7 @@
 // CC Dental · web sin conexión · service worker (16/10/2026): guarda la página en la tablet para abrirla sin red.
 // Los archivos de la página: primero lo guardado (abre al instante y sin red) y, con red, se actualizan para la próxima
 // vez. Las llamadas a la puerta de entrada de Google (otro dominio) no pasan por aquí.
-var CACHE = 'cc-dental-16102026-33.4';
+var CACHE = 'cc-dental-19102026-34.4';
 var ARCHIVOS = ['./', 'index.html', 'cargador.js', 'app.js', 'manifest.webmanifest', 'icono.png'];
 self.addEventListener('install', function (e) { e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(ARCHIVOS); }).then(function () { return self.skipWaiting(); })); });
 self.addEventListener('activate', function (e) {

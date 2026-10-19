@@ -188,6 +188,92 @@ var CAMPOS_DISPARO = [['kvf','kVp fijado'],['maf','mA fijado'],['tf','t fijado (
 var nEq = 0, nSa = 0;
 var LECT_DISPARO = ['kvm', 'tm', 'dosis'], TEC_DISPARO = ['kvf', 'maf', 'tf', 'dist'];
 var UMBRAL = 0.15, UMBRAL_SALA = 0.30;   // como en el libro Excel: violeta si la lectura se aleja más de esto de la anterior
+// PERSONAL (19/10/2026, decisión del usuario del 18/10): el personal de la instalación llega con nombre e iniciales y DNI
+// enmascarado (ANT.per = [{e: IDDeEmpleado, n, c: cualificación, d: dosimetría Sí/No}]); por cada persona: Sigue / Baja /
+// Datos a corregir (qué y, para cualificación o dosimetría, el dato correcto, que la oficina aplica sola). Las ALTAS se
+// escriben completas pero salen CIFRADAS con la clave PÚBLICA de la oficina (WebCrypto: RSA-OAEP + AES-256-CBC +
+// HMAC-SHA256); solo la oficina las descifra al recibirlas. Nunca se guardan en borradores ni en Google en claro.
+var CLAVE_PERSONAL = {"kty":"RSA","alg":"RSA-OAEP","e":"AQAB","n":"uXIzXPyLc2OWjxncVDVTDAagHB3DuKzO8rFYDJTG4DvPTZ8pXbWOrHsGq7UbMj5VI02N1owaFvTrdsHuiZtRWe5YrlOYJ_cv9pua3jmFEC1gbmYBxHHNnLuvxLT7jgWyg-0RtVi0xAz5R5U11A8eVGyuOzyHFl6HT9B-n4FaIHyeZdPN_cH4fQSVunf4TEwHNn_iwLi6MB40wOYDuA-FilnyDW8RsUp6aPtivqC3uRgeGl5JWJMvCdZg07CKPMnTVd9GtiAUqEPOf6IWp0BlsFgHuNlEL1Cx7hVjkC-8PZ8jYHLmBs1Q52kGVuNy1tkJB6TRXh3YinNRk0_1rETnGQ"};   // clave PÚBLICA de la oficina (scripts\generar_claves_personal.ps1)
+var PER_CORR = ['Nombre o apellidos', 'DNI', 'Cualificación', 'Dosimetría', 'Otro'];
+var PER_CUAL = ['Director', 'Operador', 'Pendiente', 'Sin cualificación'];
+var ALTA_CAMPOS = [['ApellidosNombre', 'Apellidos, nombre', 'ancho'], ['DNI', 'DNI / NIE'], ['FechaNacimiento', 'Fecha de nacimiento', 'fecha'], ['Cualificación', 'Cualificación', 'cual'], ['DosimetríaPersonal', 'Dosimetría personal', 'sino'],
+  ['FechaInicio', 'Fecha de inicio'], ['NombreServicio', 'Servicio'], ['CentroDeLectura', 'Centro de lectura'], ['Nº del Centro', 'Nº del centro'], ['Número de Dosímetros', 'Nº de dosímetros'], ['Con Rp', 'Con RP (Sí/No)', 'sino2']];
+var nAlta = 0;
+function opcPer(l, sel) { return '<option></option>' + l.map(function (x) { return '<option' + (x === sel ? ' selected' : '') + '>' + x + '</option>'; }).join(''); }
+function pintarPersonal(guardado) {
+  var c = document.getElementById('per-cuerpo'); if (!c) return; var l = (ANT && ANT.per) || [], g = {}; nAlta = 0;
+  ((guardado && guardado.revisados) || []).forEach(function (x) { g[x.emp] = x; });
+  c.innerHTML = (l.length ? '<p class="ayuda">Revise con la instalación su personal. Solo se envían las filas marcadas. Los nombres van abreviados por protección de datos.</p>' +
+    '<div class="tabla"><table class="per"><thead><tr><th>Persona</th><th>Cualificación</th><th>Dosimetría</th><th>Situación</th><th>¿Qué hay que corregir?</th><th>Dato correcto</th><th>Observaciones (sin nombres ni DNI)</th></tr></thead><tbody>' +
+    l.map(function (p) { var x = g[p.e] || {};
+      return '<tr data-emp="' + p.e + '" data-n="' + String(p.n || '').replace(/"/g, '&quot;') + '"><td>' + (p.n || '') + '</td><td>' + (p.c || '') + '</td><td>' + (p.d || '') + '</td>' +
+        '<td><select data-pe="sit">' + opcPer(['Sigue', 'Baja', 'Datos a corregir'], x.sit) + '</select></td><td><select data-pe="corr">' + opcPer(PER_CORR, x.corr) + '</select></td>' +
+        '<td><select data-pe="valor"></select></td><td><input data-pe="obs" value="' + String(x.obs || '').replace(/"/g, '&quot;') + '"></td></tr>'; }).join('') + '</tbody></table></div>'
+    : '<p class="ayuda">No hay personal registrado en la base para esta instalación.</p>') +
+    '<div class="fila" style="margin-top:8px"><div class="campo"><label>¿Hay personas nuevas?</label><select id="per-nuevas">' + opcPer(['Sí', 'No'], (guardado && guardado.nuevas) || '') + '</select></div>' +
+    '<div class="campo"><label>¿Cuántas?</label><input id="per-cuantas" class="num" inputmode="numeric" value="' + ((guardado && guardado.cuantas) || '') + '"></div>' +
+    '<div class="campo ancho"><label>Observaciones sobre las altas (sin nombres ni DNI)</label><input id="per-obsn" value="' + String((guardado && guardado.obsn) || '').replace(/"/g, '&quot;') + '"></div></div>' +
+    '<div id="per-altas"></div><div class="acciones" id="per-alta-btn" style="display:none"><button type="button" onclick="nuevaAlta()">+ persona nueva (datos completos)</button></div>' +
+    '<p class="ayuda" id="per-aviso" style="display:none"><b>Protección de datos:</b> los datos de las personas nuevas solo se ven en esta pantalla; se envían cifrados y solo la oficina puede leerlos. No se guardan en los borradores: escríbalos justo antes de enviar. ' +
+    'Informe a la persona de que sus datos se comunican a Radioprotección Consultores para la gestión de la protección radiológica de la instalación. Si no pueden darlos ahora, deje solo «¿Cuántas?» y la oficina llamará al titular.</p>';
+  c.querySelectorAll('tr[data-emp]').forEach(function (tr) { var x = g[tr.getAttribute('data-emp')] || {}; ponerValorPer(tr, x.valor); });
+  actPersonal();
+}
+function ponerValorPer(tr, val) {
+  var corr = tr.querySelector('[data-pe="corr"]').value, s = tr.querySelector('[data-pe="valor"]');
+  var l = corr === 'Cualificación' ? PER_CUAL : corr === 'Dosimetría' ? ['Sí', 'No'] : [];
+  s.innerHTML = opcPer(l, val); s.disabled = !l.length;
+}
+function actPersonal() {
+  document.querySelectorAll('#per-cuerpo tr[data-emp]').forEach(function (tr) {
+    var sit = tr.querySelector('[data-pe="sit"]').value, cr = tr.querySelector('[data-pe="corr"]');
+    cr.disabled = sit !== 'Datos a corregir'; if (cr.disabled && cr.value) { cr.value = ''; }
+    var s = tr.querySelector('[data-pe="valor"]'), ok = cr.value === 'Cualificación' ? PER_CUAL : cr.value === 'Dosimetría' ? ['Sí', 'No'] : [];
+    if (s.options.length !== ok.length + 1) ponerValorPer(tr, s.value);
+    tr.style.background = sit === 'Baja' ? '#FDE2E2' : sit === 'Datos a corregir' ? '#FFF2CC' : '';
+  });
+  var nv = document.getElementById('per-nuevas'); if (!nv) return; var si = nv.value === 'Sí';
+  document.getElementById('per-alta-btn').style.display = si ? '' : 'none'; document.getElementById('per-aviso').style.display = si ? '' : 'none';
+  if (!si) { document.getElementById('per-altas').innerHTML = ''; nAlta = 0; }
+}
+function nuevaAlta() {
+  nAlta++; var d = document.createElement('div'); d.className = 'alta'; d.id = 'alta' + nAlta;
+  d.innerHTML = '<h3>Persona nueva ' + nAlta + ' <button type="button" onclick="this.closest(\'.alta\').remove()">quitar</button></h3><div class="fila">' + ALTA_CAMPOS.map(function (c) {
+    var inp = c[2] === 'fecha' ? '<input type="date" data-al="' + c[0] + '">' : c[2] === 'cual' ? '<select data-al="' + c[0] + '">' + opcPer(PER_CUAL) + '</select>' : c[2] === 'sino' || c[2] === 'sino2' ? '<select data-al="' + c[0] + '">' + opcPer(['Sí', 'No']) + '</select>' : '<input data-al="' + c[0] + '" autocomplete="off">';
+    return '<div class="campo' + (c[2] === 'ancho' ? ' ancho' : '') + '"><label>' + c[1] + '</label>' + inp + '</div>'; }).join('') + '</div>';
+  document.getElementById('per-altas').appendChild(d);
+}
+document.addEventListener('change', function (ev) { if (ev.target && ev.target.closest && ev.target.closest('#per-cuerpo')) actPersonal(); });
+// lo que se envía (y se guarda en el borrador) del personal: SIN las altas
+function recogerPersonal() {
+  var r = { revisados: [], nuevas: v(document.getElementById('per-nuevas')), cuantas: v(document.getElementById('per-cuantas')), obsn: v(document.getElementById('per-obsn')) };
+  document.querySelectorAll('#per-cuerpo tr[data-emp]').forEach(function (tr) {
+    var q = function (k) { return v(tr.querySelector('[data-pe="' + k + '"]')); };
+    if (q('sit')) r.revisados.push({ emp: tr.getAttribute('data-emp'), nombre: tr.getAttribute('data-n'), sit: q('sit'), corr: q('corr'), valor: q('valor'), obs: q('obs') });
+  });
+  return (r.revisados.length || r.nuevas) ? r : null;
+}
+function altasEscritas() {
+  var l = []; document.querySelectorAll('#per-altas .alta').forEach(function (a) { var o = {}, alguno = false; a.querySelectorAll('[data-al]').forEach(function (e) { o[e.getAttribute('data-al')] = v(e); if (v(e)) alguno = true; }); if (alguno) l.push(o); });
+  return l;
+}
+function b64(buf) { var s = '', b = new Uint8Array(buf); for (var i = 0; i < b.length; i++) s += String.fromCharCode(b[i]); return btoa(s); }
+function unir(a, b) { var r = new Uint8Array(a.byteLength + b.byteLength); r.set(new Uint8Array(a), 0); r.set(new Uint8Array(b), a.byteLength); return r; }
+function cifrarAltas(altas) {
+  if (!CLAVE_PERSONAL) return Promise.reject(new Error('Esta página no tiene la clave de la oficina para cifrar las altas.'));
+  if (!(window.crypto && crypto.subtle)) return Promise.reject(new Error('Este navegador no permite cifrar.'));
+  var S = crypto.subtle, aes = crypto.getRandomValues(new Uint8Array(32)), mac = crypto.getRandomValues(new Uint8Array(32)), iv = crypto.getRandomValues(new Uint8Array(16)), ct;
+  var datos = new TextEncoder().encode(JSON.stringify(altas));
+  return S.importKey('raw', aes, { name: 'AES-CBC' }, false, ['encrypt'])
+    .then(function (k) { return S.encrypt({ name: 'AES-CBC', iv: iv }, k, datos); })
+    .then(function (c) { ct = c; return S.importKey('raw', mac, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']); })
+    .then(function (k) { return S.sign('HMAC', k, unir(iv.buffer, ct)); })
+    .then(function (tag) {
+      return S.importKey('jwk', CLAVE_PERSONAL, { name: 'RSA-OAEP', hash: 'SHA-1' }, false, ['encrypt'])
+        .then(function (pk) { return S.encrypt({ name: 'RSA-OAEP' }, pk, unir(aes.buffer, mac.buffer)); })
+        .then(function (k) { return { v: 1, n: altas.length, k: b64(k), iv: b64(iv), ct: b64(ct), tag: b64(tag) }; });
+    });
+}
 var ANT = null;                           // datos de la instalación elegida (equipos del censo y su último control)
 
 // ---- prerrelleno desde la base (13/10/2026): equipos del censo y último control antiguo de la instalación
@@ -250,7 +336,7 @@ function pedirAnteriores() {
     .datosAnteriores(cod);
 }
 function prellenar(d, cod) {
-  ANT = d; ANT._cod = cod; pintarCab(); instVigente = document.getElementById('inst').value;
+  ANT = d; ANT._cod = cod; pintarCab(); pintarPersonal(); instVigente = document.getElementById('inst').value;
   // fecha del control = la de la cita de la Tabla de seguimiento (16/10/2026), propuesta en verde; sin completar nada
   var fe0 = document.getElementById('fecha'); fe0.readOnly = false; fe0.removeAttribute('title'); COMPLETAR = null;
   var fp = window.FECHA_PROPUESTA || d.cita; window.FECHA_PROPUESTA = null;   // la de la cita elegida en la agenda (web sin conexión) o la última cita
@@ -1016,6 +1102,7 @@ function recoger(todo) {
     if (todo) { sa._m = {}; ['letra', 'equipo', 'funciona', 'kv', 'ma', 't', 'dfp', 'carga'].forEach(function (k) { sa._m[k] = atr(t.querySelector('[data-s="' + k + '"]')); }); }
     if (sa.puntos.length || (todo && sa.letra)) d.salas.push(sa);
   });
+  var pe = recogerPersonal(); if (pe) d.personal = pe;
   return d;
 }
 function aviso(txt, ok) { var a = document.getElementById('aviso'); a.className = 'aviso ' + (ok ? 'ok' : 'mal'); a.innerHTML = txt; a.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
@@ -1028,6 +1115,8 @@ function enviar() {
   if (!d.equipos.length && !d.salas.length) errores.push('No hay ningún equipo ni sala con lecturas.');
   d.equipos.forEach(function (e, i) { if (!e.id) errores.push('Equipo ' + (i + 1) + ': falta el ID_EQUIPO.'); });
   d.salas.forEach(function (s, i) { if (!s.letra) errores.push('Sala ' + (i + 1) + ': falta la letra de la sala.'); });
+  var altas = altasEscritas(); altas.forEach(function (a, i) { if (!a.ApellidosNombre) errores.push('Persona nueva ' + (i + 1) + ': faltan los apellidos y el nombre.'); });
+  if (!d.equipos.length && !d.salas.length && d.personal && errores.length === 1 && errores[0].indexOf('ningún equipo') >= 0) errores = [];   // también se puede enviar solo el personal
   if (errores.length) { aviso('<b>No se ha enviado:</b><br>' + errores.join('<br>'), false); return; }
   var nf = colorear();
   if (nf && !enviar.forzar) {   // 16/10/2026: pregunta en la página (sin confirm())
@@ -1035,6 +1124,14 @@ function enviar() {
     return;
   }
   var b = document.getElementById('enviar'); b.disabled = true; b.textContent = 'Enviando…';
+  if (altas.length) {   // altas de personal: se cifran antes de salir de la página
+    d.personal = d.personal || { revisados: [], nuevas: 'Sí' }; d.personal.nuevas = 'Sí';
+    cifrarAltas(altas).then(function (c) { d.personal.altas_cif = c; mandarControl(d, b); }, function (e) { b.disabled = false; b.textContent = 'Enviar el control'; aviso('<b>No se ha enviado:</b> no se han podido cifrar las altas de personal (' + (e && e.message ? e.message : e) + ').', false); });
+    return;
+  }
+  mandarControl(d, b);
+}
+function mandarControl(d, b) {
   CONEXION.run()
     .withSuccessHandler(function (marca) {
       var c1 = codActual(); try { localStorage.removeItem('cc_web_borrador'); if (c1) localStorage.removeItem('cc_web_borrador_' + c1); } catch (e) { }
@@ -1122,7 +1219,7 @@ function rellenarDesde(d) {
   document.getElementById('equipos').innerHTML = ''; document.getElementById('salas').innerHTML = '';
   ['inst', 'fecha', 'tecnico', 'medidor'].forEach(function (k) { document.getElementById(k).value = d[k] || ''; });
   IDENT.forEach(function (k) { var e = document.getElementById(k); if (e && d.ident) { e.value = d.ident[k] || ''; e.removeAttribute('data-sug'); marcar(e, d.ident['_' + k]); } });
-  ANT = d.ant || null; pintarCab(); instVigente = d.inst || '';
+  ANT = d.ant || null; pintarCab(); pintarPersonal(d.personal); instVigente = d.inst || '';
   if (ANT) document.getElementById('lista-eq').innerHTML = (ANT.eq || []).map(function (e) { return '<option value="' + e.id + '">' + (e.d || '') + '</option>'; }).join('');
   (d.equipos || []).forEach(function (e) {
     nuevoEquipo(); var t = document.getElementById('eq' + nEq), tb = t.querySelector('tbody'), m = e._m || {};

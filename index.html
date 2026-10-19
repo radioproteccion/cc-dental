@@ -88,6 +88,7 @@
   .cargando.pregunta button { font-size:15px; padding:8px 16px; margin:6px 10px 0 0; font-weight:600; }
   .cargando.pregunta button:first-of-type { background:#1F4E78; color:#fff; }
   .desc { font-weight:normal; font-size:13px; color:#555; margin-left:8px; flex:1; }
+  table.per td, table.per th { white-space: normal; } table.per select, table.per input { width: 100%; min-width: 90px; } .alta { border: 1px dashed #9AA4AE; border-radius: 8px; padding: 8px 10px; margin: 8px 0; background: #FAFBFD; } .alta h3 { margin: 0 0 6px; font-size: 14px; }
   /* versión sin conexión (16/10/2026): barra de estado, agenda y configuración */
   #offbar { position:sticky; top:0; z-index:20; background:#16365C; color:#fff; padding:6px 12px; font-size:13px; }
   #offbar button { margin-left:6px; padding:3px 9px; border-color:#fff; }
@@ -143,6 +144,8 @@
   <div id="salas"></div>
   <div class="acciones"><button type="button" onclick="nuevaSala()">+ sala (niveles de radiación)</button></div>
 
+  <div class="tarjeta" id="personal"><h2>Personal de la instalación</h2><div id="per-cuerpo"><p class="ayuda">Elija la instalación para ver su personal.</p></div></div>
+
   <div class="tarjeta inf" id="informe"><h2>Informe provisional (como la hoja Informe del libro Excel) <span id="global"></span></h2>
     <p class="ayuda">Se calcula solo, con las tolerancias del libro Excel (PECCRD 2011). Es orientativo: el informe oficial es el de la base de datos.</p>
     <div class="acciones"><button type="button" onclick="imprimirInforme()">🖨 Imprimir / guardar PDF del informe</button></div>
@@ -153,10 +156,10 @@
   <div class="pie"><button type="button" id="guardarG" onclick="guardarEnGoogle(true)" style="margin-right:14px;padding:9px 16px" title="Guarda el control tal como está, sin enviarlo, para continuarlo después desde cualquier ordenador">💾 Guardar sin enviar</button><button type="button" class="primario" id="enviar" onclick="enviar()">Enviar el control</button>
     <p class="ayuda" id="guardado" style="margin-top:6px"></p>
     <div id="preg-enviar" class="cargando" style="text-align:left;max-width:700px;margin:8px auto"></div>
-    <p class="ayuda" style="margin-top:14px">Versión de la página: 16/10/2026 (33) · sin ventanas emergentes · módulo de conexión · borrador por técnico · completar control · fecha de la cita · avisos bajo la instalación · borradores solo con lecturas · preguntas en la página · borradores por instalación · CHR con tasas · instrumento único · D4 · DL015 con un disparo · equipo que no funciona · salas tras su equipo · 4 disparos · sin receptor digital · panorámicos P1–P6 · disparos D1–D4 · DX12–DX15 · DL015 · identificación completa · pruebas analógicas / digitales: NO PROCEDE · el informe solo lleva las pruebas realizadas</p></div>
+    <p class="ayuda" style="margin-top:14px">Versión de la página: 19/10/2026 (34) · personal con altas cifradas · sin ventanas emergentes · módulo de conexión · borrador por técnico · completar control · fecha de la cita · avisos bajo la instalación · borradores solo con lecturas · preguntas en la página · borradores por instalación · CHR con tasas · instrumento único · D4 · DL015 con un disparo · equipo que no funciona · salas tras su equipo · 4 disparos · sin receptor digital · panorámicos P1–P6 · disparos D1–D4 · DX12–DX15 · DL015 · identificación completa · pruebas analógicas / digitales: NO PROCEDE · el informe solo lleva las pruebas realizadas</p></div>
 </main>
 
-<script src="cargador.js?v=16102026-33.4"></script>
+<script src="cargador.js?v=19102026-34.4"></script>
 
 </body>
 </html>
