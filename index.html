@@ -115,6 +115,7 @@
     </div>
     <div id="cargando" class="cargando"></div>
     <div id="cabinst" class="ayuda" style="margin:8px 0;font-size:13px;color:#333"></div>
+    <div id="csn-aviso"></div>
     <div class="fila">
       <div class="campo"><label>Nº de control en el año</label><input id="ncontrol" class="num" inputmode="numeric" title="1 = revisión programada; 2, 3… = controles extraordinarios del mismo año"></div>
       <div class="campo ancho"><label>Motivo del control</label><input id="motivo" list="lista-motivo"><datalist id="lista-motivo"><option value="Revisión anual programada"><option value="Control inicial (alta del equipo)"><option value="Tras reparación o cambio de componentes"><option value="Otro"></datalist></div>
@@ -146,6 +147,8 @@
 
   <div class="tarjeta" id="personal"><h2>Personal de la instalación</h2><div id="per-cuerpo"><p class="ayuda">Elija la instalación para ver su personal.</p></div></div>
 
+  <div class="tarjeta" id="csn"><h2>Documentación para el CSN / Industria <span id="csn-motivo" style="font-weight:normal;font-size:14px"></span></h2><div id="csn-cuerpo"></div></div>
+
   <div class="tarjeta inf" id="informe"><h2>Informe provisional (como la hoja Informe del libro Excel) <span id="global"></span></h2>
     <p class="ayuda">Se calcula solo, con las tolerancias del libro Excel (PECCRD 2011). Es orientativo: el informe oficial es el de la base de datos.</p>
     <div class="acciones"><button type="button" onclick="imprimirInforme()">🖨 Imprimir / guardar PDF del informe</button></div>
@@ -156,10 +159,10 @@
   <div class="pie"><button type="button" id="guardarG" onclick="guardarEnGoogle(true)" style="margin-right:14px;padding:9px 16px" title="Guarda el control tal como está, sin enviarlo, para continuarlo después desde cualquier ordenador">💾 Guardar sin enviar</button><button type="button" class="primario" id="enviar" onclick="enviar()">Enviar el control</button>
     <p class="ayuda" id="guardado" style="margin-top:6px"></p>
     <div id="preg-enviar" class="cargando" style="text-align:left;max-width:700px;margin:8px auto"></div>
-    <p class="ayuda" style="margin-top:14px">Versión de la página: 19/10/2026 (34) · personal con altas cifradas · sin ventanas emergentes · módulo de conexión · borrador por técnico · completar control · fecha de la cita · avisos bajo la instalación · borradores solo con lecturas · preguntas en la página · borradores por instalación · CHR con tasas · instrumento único · D4 · DL015 con un disparo · equipo que no funciona · salas tras su equipo · 4 disparos · sin receptor digital · panorámicos P1–P6 · disparos D1–D4 · DX12–DX15 · DL015 · identificación completa · pruebas analógicas / digitales: NO PROCEDE · el informe solo lleva las pruebas realizadas</p></div>
+    <p class="ayuda" style="margin-top:14px">Versión de la página: 25/10/2026 (38) · fuga con la corriente efectiva del cabezal · barreras secundarias: dispersa + fuga sumadas tras la barrera · equivalencia en plomo de las barreras por la medida · documentación para el CSN / Industria · personal con altas cifradas · sin ventanas emergentes · módulo de conexión · borrador por técnico · completar control · fecha de la cita · avisos bajo la instalación · borradores solo con lecturas · preguntas en la página · borradores por instalación · CHR con tasas · instrumento único · D4 · DL015 con un disparo · equipo que no funciona · salas tras su equipo · 4 disparos · sin receptor digital · panorámicos P1–P6 · disparos D1–D4 · DX12–DX15 · DL015 · identificación completa · pruebas analógicas / digitales: NO PROCEDE · el informe solo lleva las pruebas realizadas</p></div>
 </main>
 
-<script src="cargador.js?v=19102026-34.4"></script>
+<script src="cargador.js?v=25102026-38.5"></script>
 
 </body>
 </html>

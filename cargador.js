@@ -3,7 +3,7 @@
 // datos (IndexedDB: instalaciones, instrumentos, controles anteriores y agenda) y 3) carga la página (app.js, generada a
 // partir de appscript/CC_Web.html con el módulo de conexión sin conexión).
 (function () {
-  var VERSION = '19102026-34.4';
+  var VERSION = '25102026-38.5';
   function abrir() {
     return new Promise(function (ok, ko) {
       var r = indexedDB.open('cc_dental', 1);
@@ -17,6 +17,15 @@
     borrar: function (k) { return abrir().then(function (db) { return new Promise(function (ok, ko) { var t = db.transaction('datos', 'readwrite'); t.objectStore('datos').delete(k); t.oncomplete = function () { ok(); }; t.onerror = function () { ko(t.error); }; }); }); }
   };
   function ls(k, d) { try { return localStorage.getItem(k) || d; } catch (e) { return d; } }
+  // 23/10/2026: enlace de configuración «…/cc-dental/#api=<dirección>&tablet=A» (se manda por correo a la tablet): guarda la
+  // dirección de la puerta de entrada y la tablet sin teclearlas. Lo que va tras «#» no sale del aparato (no llega a GitHub).
+  // La clave NUNCA va en el enlace: se teclea en ⚙.
+  try {
+    var h = /[#&]api=([^&]+)/.exec(location.hash), tb = /[#&]tablet=([AB])/i.exec(location.hash);
+    if (h) { localStorage.setItem('cc_off_api', decodeURIComponent(h[1])); }
+    if (tb) { localStorage.setItem('cc_off_tablet', tb[1].toUpperCase()); }
+    if (h || tb) { history.replaceState(null, '', location.pathname + location.search); }
+  } catch (e) { }
   window.CFG = { api: ls('cc_off_api', ''), clave: ls('cc_off_clave', ''), tablet: ls('cc_off_tablet', 'A'), version: VERSION };
   if ('serviceWorker' in navigator) { navigator.serviceWorker.register('sw.js').catch(function () { }); }
   window.CCDB.leer('paquete').then(function (p) { window.PAQUETE = p || null; }, function () { window.PAQUETE = null; }).then(function () {

@@ -336,7 +336,7 @@ function pedirAnteriores() {
     .datosAnteriores(cod);
 }
 function prellenar(d, cod) {
-  ANT = d; ANT._cod = cod; pintarCab(); pintarPersonal(); instVigente = document.getElementById('inst').value;
+  ANT = d; ANT._cod = cod; pintarCab(); pintarPersonal(); pintarCsn(); instVigente = document.getElementById('inst').value;
   // fecha del control = la de la cita de la Tabla de seguimiento (16/10/2026), propuesta en verde; sin completar nada
   var fe0 = document.getElementById('fecha'); fe0.readOnly = false; fe0.removeAttribute('title'); COMPLETAR = null;
   var fp = window.FECHA_PROPUESTA || d.cita; window.FECHA_PROPUESTA = null;   // la de la cita elegida en la agenda (web sin conexión) o la última cita
@@ -366,7 +366,7 @@ function prellenar(d, cod) {
     sug(t.querySelector('[data-s="letra"]'), s.l); sug(t.querySelector('[data-s="equipo"]'), s.eq);
     while (tb.rows.length < Math.min(ps.length, LETRAS_PUNTO.length)) nuevoPunto('sa' + nSa);
     ps.slice(0, LETRAS_PUNTO.length).forEach(function (p, i) {
-      ['eti', 'uni', 'haz', 'fo'].forEach(function (k) { sug(tb.rows[i].querySelector('[data-p="' + k + '"]'), p[k]); });
+      ['eti', 'uni', 'haz', 'fo', 'd'].forEach(function (k) { sug(tb.rows[i].querySelector('[data-p="' + k + '"]'), p[k]); });   // d = maniquí → punto del control anterior
       ant(tb.rows[i].querySelector('[data-p="valor"]'), p.v);
     });
   });
@@ -380,6 +380,217 @@ function prellenar(d, cod) {
   aplicarTecnico(); colorear(); guardarBorrador();
 }
 
+// EQUIVALENCIA EN PLOMO DE LAS BARRERAS A PARTIR DE LA TASA MEDIDA (25/10/2026, petición del usuario; mismas fórmulas que la
+// hoja Blindaje_dental_GS511 de la oficina, método GS 5.11). Se mide con MANIQUÍ como dispersor. Tasa sin barrera en el punto,
+// con la técnica de la sala y el rendimiento MEDIDO del equipo en este control:
+//   haz directo  Γ·mA/dF²  (dF: foco → punto; el haz directo con rendimiento medido es una atenuación MEDIDA)
+//   secundaria   dispersa Γ·mA·a·S/(dp²·ds²·400) + fuga f·L/d²   (ds: maniquí → punto; fuga con dF si se conoce, si no ds)
+//   a = 0,002 (GS 5.11), f = 0,3, L = 0,25 mGy/h (intraoral, IEC 60601-2-65) o 1 mGy/h; S = 28,3 cm² (Ø 6 cm) o 15 cm² (panorámico);
+//   dp = d (f, p) de la sala o 0,20 / 0,50 m.
+// Transmisión = tasa medida / tasa sin barrera → espesor de plomo con la curva de la GS 5.11 (Archer, NCRP 147 Tabla A.1) a la
+// tensión tabulada inmediatamente superior; si manda la fuga, con la CHR/CDR de la Tabla 4.
+var BLQ_ARCH = [[150, 1.791, 5.478, 0.5678], [125, 2.233, 7.888, 0.7295], [100, 2.507, 15.33, 0.9124], [70, 5.369, 23.49, 0.5881], [50, 8.801, 27.28, 0.2957], [30, 38.8, 178, 0.3473]];
+var BLQ_CHR = [[150, 0.29, 0.96], [125, 0.27, 0.27], [100, 0.25, 0.84], [75, 0.15, 0.5], [50, 0.05, 0.18]];
+var BLQ = { a: 0.002, f: 0.3 };
+var BLQ_MAT = ['Desconocida', 'Plomo', 'Hormigón', 'Ladrillo macizo', 'Yeso laminado', 'Hormigón baritado', 'Hormigón celular'];
+function blqFila(tab, kv) { var r = tab[0]; for (var i = 0; i < tab.length; i++) if (tab[i][0] >= kv) r = tab[i]; return r; }   // tensión tabulada inmediatamente superior
+function blqEquipo(ts) {
+  var id = v(ts.querySelector('[data-s="equipo"]')), l = Array.prototype.slice.call(document.querySelectorAll('.tarjeta.equipo'));
+  return l.filter(function (t) { return id && v(t.querySelector('[data-k="id"]')) === id; })[0] || null;
+}
+function blqRend(teq, kv) {   // rendimiento medido en este control (µGy/mAs a 1 m), de los disparos con el kV más próximo al de la sala
+  if (!teq) return NaN; var l = [];
+  Array.prototype.forEach.call(teq.querySelectorAll('tbody tr'), function (r) {
+    var g = function (k) { var e = r.querySelector('[data-d="' + k + '"]'); return e ? n_(e.value) : NaN; };
+    var ds = g('dosis'), dd = g('dist'), ma = g('maf'), tt = !isNaN(g('tm')) ? g('tm') : g('tf'), k = g('kvf');
+    if (!isNaN(ds) && !isNaN(dd) && ma && tt) l.push([isNaN(k) ? 0 : k, ds * 1000 * Math.pow(dd / 100, 2) / (ma * tt)]);
+  });
+  if (!l.length) return NaN;
+  var dmin = Math.min.apply(null, l.map(function (x) { return Math.abs(x[0] - (kv || x[0])); }));
+  var sel = l.filter(function (x) { return Math.abs(x[0] - (kv || x[0])) === dmin; });
+  return media(sel.map(function (x) { return x[1]; }));
+}
+function blqEstimar(ts, tr) {
+  var g = function (k) { return n_(v(tr.querySelector('[data-p="' + k + '"]'))); }, s = function (k) { return n_(v(ts.querySelector('[data-s="' + k + '"]'))); };
+  var val = g('valor'), uni = v(tr.querySelector('[data-p="uni"]')), haz = v(tr.querySelector('[data-p="haz"]')), ds = g('d'), df = g('df');
+  var kv = s('kv'), ma = s('ma'), t = s('t'), dfp = s('dfp');   // «Residual» = haz directo; «Secundario» y «Fuga» = secundaria (criterio del usuario)
+  if (isNaN(val) || !uni) return null;
+  var tasa = uni === 'mR/h' ? val * 10 : uni === 'µSv/h' ? val : (t > 0 ? (uni === 'mR' ? val * 10 : val) * 3600 / t : NaN);   // dosis por disparo → tasa
+  if (isNaN(tasa)) return { txt: '', tit: 'Falta el tiempo de la técnica de la sala para pasar la dosis a tasa' };
+  var teq = blqEquipo(ts), R = blqRend(teq, kv), pan = teq ? esPan(teq) : kv > 75;
+  if (isNaN(R)) return { txt: '', tit: 'Falta el rendimiento medido del equipo de la sala (disparos con dosis y distancia)' };
+  if (!ma || !kv) return { txt: '', tit: 'Falta la técnica de la sala (kVp y mA)' };
+  var G = R * 3600, r0, rdis = 0, rfug = 0, directo = haz === 'Residual';
+  if (directo) { if (!(df > 0)) return { txt: '', tit: 'Haz residual (directo): falta la distancia foco → punto' }; r0 = G * ma / (df * df); }
+  else {
+    if (!(ds > 0)) return { txt: '', tit: 'Falta la distancia maniquí → punto' };
+    var dp = dfp > 0 ? dfp / 100 : (pan ? 0.5 : 0.2), S = pan ? 15 : Math.PI * 9, dfu = df > 0 ? df : ds, L = pan ? 1 : 0.25;
+    rdis = G * ma * BLQ.a * S / (dp * dp * ds * ds * 400); rfug = 1000 * BLQ.f * L * (pan ? 20 : 30) / (dfu * dfu); r0 = rdis + rfug;   // fuga durante el disparo = L·mA/I, I = mA × 1/30 (intraoral) o × 1/20 (NCRP 145 F.2.1.5)
+  }
+  var B = tasa / r0; if (!(B > 0)) return null;
+  if (B >= 1) return { x: 0, txt: '0', tit: 'Sin atenuación apreciable (tasa medida ≥ tasa calculada sin barrera: ' + fx(r0, 1) + ' µSv/h)' };
+  var x;
+  var p = blqFila(BLQ_ARCH, kv), al = p[1], be = p[2], ga = p[3], manda = '';
+  var Bs = function (m) { return Math.pow((1 + be / al) * Math.exp(al * ga * m) - be / al, -1 / ga); };
+  if (directo) x = Math.log((Math.pow(1 / B, ga) + be / al) / (1 + be / al)) / (al * ga);
+  else {   // (25/10/2026, criterio del usuario) dosis DESPUÉS de la barrera: dispersa·Bs(x) + fuga·Bl(x) = tasa medida
+    var c = blqFila(BLQ_CHR, kv), Bl = function (m) { return Math.max(Math.pow(2, -m / c[1]), Math.pow(10, -m / c[2])); };
+    var lo = 0, hi = 10;
+    for (var it = 0; it < 40; it++) { var mid = (lo + hi) / 2; if (rdis * Bs(mid) + rfug * Bl(mid) > tasa) lo = mid; else hi = mid; }
+    x = (lo + hi) / 2;
+    manda = rfug * Bl(x) > rdis * Bs(x) ? 'fuga (la más dura)' : 'dispersa';
+    if (x > 9.99) manda += '; más de 10 mm Pb';
+  }
+  return { x: x, txt: fx(x, 2), tit: (directo ? 'Haz residual (directo) con rendimiento medido: atenuación MEDIDA (incluye la del maniquí y el receptor si se interponen)' : 'Secundaria: dispersa (a = 0,002, maniquí) y fuga estimadas y SUMADAS tras la barrera; tras ese espesor manda la ' + manda) +
+    '. Tasa sin barrera ' + fx(r0, 1) + ' µSv/h; medida ' + fx(tasa, 2) + ' µSv/h; transmisión ' + B.toExponential(2).replace('.', ',') + '; rendimiento ' + fx(R, 1) + ' µGy/mAs.' };
+}
+function blqActualizar() {
+  Array.prototype.forEach.call(document.querySelectorAll('.tarjeta.sala'), function (ts) {
+    Array.prototype.forEach.call(ts.querySelectorAll('tbody tr'), function (tr) {
+      var c = tr.querySelector('.pbeq'), dfi = tr.querySelector('[data-p="df"]'); if (!c) return;
+      if (dfi) dfi.disabled = false;
+      var e = blqEstimar(ts, tr); c.textContent = e ? e.txt : ''; c.title = e ? e.tit : '';
+      c.style.color = e && e.x === undefined ? '#9C0006' : ''; if (e && e.x === undefined) c.textContent = '?';
+    });
+  });
+}
+// DOCUMENTACIÓN PARA EL CSN / INDUSTRIA (25/10/2026, petición del usuario): en la misma visita se recogen los datos que,
+// además del control de calidad, necesitan el CERTIFICADO DE CONFORMIDAD (RD 1085/2009, art. 18.e: bienal en tipo 2,
+// quinquenal en tipo 3), el INFORME PERIÓDICO al CSN (tipo 2) y las AUTORIZACIONES nuevas o sus MODIFICACIONES (cambio,
+// alta o baja de equipos; salas y blindajes). La oficina dice si toca (ANT.cert: tipo, ref, vence, toca, aut, dir);
+// la página detecta sola una modificación (equipo que no está en el censo). Con los datos la oficina genera documentos
+// separados para el titular. Solo se piden los datos del caso elegido; lo que falte, en naranja.
+var CSN_TIPOS = ['Periódico bienal (tipo 2)', 'Periódico quinquenal (tipo 3)', 'Modificación de la instalación', 'Alta (autorización nueva)', 'No procede en este control'];
+var CSN_C = [
+  ['titok', '¿Titular, NIF/CIF, dirección y nº de registro correctos?', 'sino', 1], ['titcamb', 'Si no, ¿qué cambia?', 'txt', 'titok=No'],
+  ['dirn', 'Director/a de la instalación', 'txt', 1], ['dirac', '¿Tiene la acreditación de director?', 'sino', 1], ['opac', '¿Todos los operadores tienen acreditación?', 'sino', 1],
+  ['salasc', '¿Cambios en salas o blindajes desde el último certificado?', 'sino', 1], ['salasd', '¿Cuáles?', 'txt', 'salasc=Sí'],
+  ['senal', '¿Señalización de zonas correcta?', 'sino', 1], ['ppr', '¿Se cumple el Programa de Protección Radiológica (normas, registros, diario)?', 'sino', 1], ['pprd', 'Desviaciones apreciadas', 'txt', 'ppr=No'],
+  ['aver', '¿Averías o reparaciones de los equipos en el periodo?', 'sino', 1], ['averd', '¿Cuáles y cuándo?', 'txt', 'aver=Sí'], ['evat', 'Empresa que reparó (EVAT)', 'txt', 'aver=Sí'],
+  ['evatc', '¿Tienen el certificado de verificación de la reparación?', 'sino3', 'aver=Sí'],
+  ['dosi', '¿Incidencias de dosimetría (lecturas anómalas, dosímetros perdidos…)?', 'sino', 1], ['dosid', '¿Cuáles?', 'txt', 'dosi=Sí'],
+  ['plano', '¿Hay plano o croquis con las salas y sus colindantes?', 'sino', 'nueva'],
+  ['autu', '¿Autoriza el titular a la UTPR a enviar el informe al CSN?', 'sino', 'tipo2']];
+var CSN_EQ = [['coinc', '¿Coincide con lo inscrito?', 'sino'], ['camb', 'Cambio', ['', 'Alta nueva', 'Sustituye a otro', 'Baja']], ['fcamb', 'Fecha del cambio', 'fecha'],
+  ['serie', 'Nº de serie', 'txt'], ['kvmax', 'kV máx.', 'num'], ['mamax', 'mA máx.', 'num'], ['anio', 'Año de fabricación', 'num'],
+  ['ce', 'Marcado CE', 'sino'], ['on', 'Organismo notificado (nº)', 'txt'], ['inst', 'Empresa instaladora', 'txt'], ['finst', 'Fecha de instalación', 'fecha']];
+var CSN_EQ_PLACA = ['serie', 'kvmax', 'mamax', 'anio', 'ce', 'on', 'inst', 'finst'];
+var CSN_BAR = [['sala', 'Sala', 'txt'], ['bar', 'Barrera', ['', 'Pared', 'Suelo', 'Techo', 'Puerta', 'Mampara / puesto de control', 'Visor / ventana']], ['uso', 'Uso del local al otro lado', 'txt'],
+  ['mat', 'Material', ['', 'Plomo', 'Hormigón', 'Ladrillo', 'Yeso laminado', 'Hormigón baritado', 'Otro']], ['esp', 'Espesor (mm)', 'num'], ['dist', 'Distancia al foco (m)', 'num']];
+var CSN_PEND = null;   // valores guardados a la espera de pintar (borrador)
+function csnSel(ops, val) { return '<option></option>' + ops.filter(Boolean).map(function (o) { return '<option' + (o === val ? ' selected' : '') + '>' + o + '</option>'; }).join(''); }
+function csnInput(tipo, attr, val) {
+  val = val == null ? '' : String(val); var q = val.replace(/"/g, '&quot;');
+  if (Array.isArray(tipo)) return '<select ' + attr + '>' + csnSel(tipo, val) + '</select>';
+  if (tipo === 'sino') return '<select ' + attr + '>' + csnSel(['Sí', 'No'], val) + '</select>';
+  if (tipo === 'sino3') return '<select ' + attr + '>' + csnSel(['Sí', 'No', 'Lo enviarán a la oficina'], val) + '</select>';
+  if (tipo === 'fecha') return '<input type="date" ' + attr + ' value="' + q + '">';
+  if (tipo === 'num') return '<input class="num" inputmode="decimal" ' + attr + ' value="' + q + '">';
+  return '<input ' + attr + ' value="' + q + '">';
+}
+function csnTipo() { return v(document.getElementById('csn-tipo')); }
+function csnActivo() { var x = csnTipo(); return !!x && x !== 'No procede en este control'; }
+function csnNueva() { var x = csnTipo(); return x === 'Alta (autorización nueva)' || x === 'Modificación de la instalación'; }
+function pintarCsn(g) {
+  var c = document.getElementById('csn-cuerpo'); if (!c) return; g = g || {}; CSN_PEND = g;
+  var ce = (ANT && ANT.cert) || null;
+  c.innerHTML = '<p class="ayuda">Además del control de calidad: datos del <b>certificado de conformidad</b> (bienal en tipo 2, quinquenal en tipo 3), del <b>informe periódico al CSN</b> (tipo 2) y de las <b>autorizaciones nuevas o modificaciones</b>. Elija el caso; la página propone el que toca.</p>' +
+    (ce ? '<p class="ayuda" style="font-size:13px;color:#333">Oficina: tipo ' + (ce.tipo || '?') + (ce.ref ? ' · último certificado ' + ce.ref : ' · sin certificado registrado') + (ce.vence ? ' · vence ' + ce.vence : '') + (ce.toca ? ' · <b>toca en este control</b>' : '') + '</p>' : '') +
+    '<div class="fila"><div class="campo ancho"><label>Documentación de este control</label><select id="csn-tipo">' + csnSel(CSN_TIPOS, g.tipo) + '</select></div></div>' +
+    '<div id="csn-datos"><div class="fila">' + CSN_C.map(function (x) {
+      return '<div class="campo' + (x[2] === 'txt' ? ' ancho' : '') + '" data-csnc="' + x[0] + '"><label>' + x[1] + '</label>' + csnInput(x[2], 'data-cs="' + x[0] + '"', g[x[0]]) + '</div>'; }).join('') + '</div>' +
+    '<h3>Equipos de la instalación</h3><p class="ayuda">Uno por cada equipo de la página. En altas y modificaciones, los datos de la placa del equipo.</p><div class="tabla"><table class="csn-eq"><thead><tr><th>Equipo</th>' + CSN_EQ.map(function (x) { return '<th data-csnh="' + x[0] + '">' + x[1] + '</th>'; }).join('') + '</tr></thead><tbody></tbody></table></div>' +
+    '<div id="csn-barreras"><h3>Salas y blindajes</h3><p class="ayuda">Para la certificación de las salas (altas, modificaciones o cambios de blindajes): una línea por barrera.</p><div class="tabla"><table class="csn-bar"><thead><tr>' + CSN_BAR.map(function (x) { return '<th>' + x[1] + '</th>'; }).join('') + '<th></th></tr></thead><tbody></tbody></table></div>' +
+    '<div class="acciones"><button type="button" onclick="csnBarrera()">+ barrera</button></div></div></div>';
+  (g.barreras || []).forEach(function (b) { csnBarrera(b); });
+  if (ce && ce.dir) { var dn = c.querySelector('[data-cs="dirn"]'); if (dn && !dn.value) sug(dn, ce.dir); }
+  if (g.tipoManual) document.getElementById('csn-tipo').setAttribute('data-manual', '1');
+  csnEquipos();
+}
+function csnBarrera(b) {
+  b = b || {}; var tb = document.querySelector('#csn table.csn-bar tbody'); if (!tb) return;
+  var r = document.createElement('tr'); r.innerHTML = CSN_BAR.map(function (x) { return '<td>' + csnInput(x[2], 'data-cb="' + x[0] + '"', b[x[0]]) + '</td>'; }).join('') + '<td><button type="button" onclick="csnQuitarFila(this)">✕</button></td>';
+  tb.appendChild(r);
+}
+function csnQuitarFila(b) { var r = b.closest('tr'); r.parentNode.removeChild(r); colorear(); guardarBorrador(); }
+// una fila por equipo de la página (se mantiene al añadir o quitar equipos); valores guardados por ID de equipo
+function csnEquipos() {
+  var tb = document.querySelector('#csn table.csn-eq tbody'); if (!tb) return;
+  var pend = {}; ((CSN_PEND && CSN_PEND.equipos) || []).forEach(function (e) { if (e.id) pend[e.id] = e; });
+  var vivas = {};
+  Array.prototype.forEach.call(document.querySelectorAll('.tarjeta.equipo'), function (t) {
+    vivas[t.id] = 1; var id = v(t.querySelector('[data-k="id"]')), r = tb.querySelector('tr[data-eqt="' + t.id + '"]');
+    if (!r) {
+      var g = pend[id] || {}; r = document.createElement('tr'); r.setAttribute('data-eqt', t.id);
+      r.innerHTML = '<td class="csn-eqn"></td>' + CSN_EQ.map(function (x) { return '<td data-csnh="' + x[0] + '">' + csnInput(x[2], 'data-ce="' + x[0] + '"', g[x[0]]) + '</td>'; }).join('');
+      tb.appendChild(r); var se = r.querySelector('[data-ce="serie"]'); if (se && !se.value && t.getAttribute('data-serie')) sug(se, t.getAttribute('data-serie'));
+    }
+    var desc = (t.querySelector('.desc') || {}).textContent || '', nuevo = !!id && !!ANT && (ANT.eq || []).length > 0 && !(ANT.eq || []).some(function (e) { return e.id === id; });
+    r.querySelector('.csn-eqn').innerHTML = '<b>' + (id || '(sin ID)') + '</b> ' + desc.replace(/</g, '&lt;') + (nuevo ? ' <span style="color:#B00020">· no está en el censo</span>' : '');
+    r.setAttribute('data-eqid', id); r.setAttribute('data-nuevo', nuevo ? '1' : '');
+    var cb = r.querySelector('[data-ce="camb"]'); if (nuevo && !cb.value) { cb.value = 'Alta nueva'; cb.setAttribute('data-sug', 'Alta nueva'); }
+  });
+  Array.prototype.forEach.call(tb.querySelectorAll('tr[data-eqt]'), function (r) { if (!vivas[r.getAttribute('data-eqt')]) r.parentNode.removeChild(r); });
+}
+// caso propuesto: modificación detectada en la visita > lo que dice la oficina (toca bienal / quinquenal)
+function csnPropuesta() {
+  var mod = Array.prototype.some.call(document.querySelectorAll('#csn table.csn-eq [data-ce="camb"]'), function (e) { return !!e.value; });
+  if (mod) return (ANT && (ANT.eq || []).length) ? 'Modificación de la instalación' : 'Alta (autorización nueva)';
+  var ce = ANT && ANT.cert; if (ce && ce.toca) return ce.tipo == 2 ? 'Periódico bienal (tipo 2)' : ce.tipo == 3 ? 'Periódico quinquenal (tipo 3)' : '';
+  return '';
+}
+document.addEventListener('change', function (ev) { if (ev.target && ev.target.id === 'csn-tipo') { if (ev.target.value) ev.target.setAttribute('data-manual', '1'); else ev.target.removeAttribute('data-manual'); } }, true);
+function colorearCsn() {
+  if (!document.getElementById('csn-cuerpo')) return 0;
+  csnEquipos();
+  var s = document.getElementById('csn-tipo'); if (!s) return 0;
+  var p = csnPropuesta(); if (!s.getAttribute('data-manual') && s.value !== p) { s.value = p; if (p) s.setAttribute('data-sug', p); else s.removeAttribute('data-sug'); }
+  var ce0 = (ANT && ANT.cert) || {}, bienalToca = ce0.tipo == 2 && !!ce0.toca, av = document.getElementById('csn-aviso'), act = csnActivo(), nueva = csnNueva(), tipo2 = csnTipo() === 'Periódico bienal (tipo 2)' || (nueva && bienalToca);
+  if (av) av.innerHTML = act ? '<div class="cargando pregunta" style="font-size:14px"><b>Este control lleva documentación para el CSN / Industria: ' + csnTipo() + (nueva && bienalToca ? ' Además toca el informe periódico bienal al CSN: el certificado de la modificación sirve para los dos' : '') + '.</b>Rellene la tarjeta «Documentación para el CSN / Industria» (debajo del personal).</div>' : '';
+  document.getElementById('csn-motivo').textContent = act ? '· ' + csnTipo() : '';
+  document.getElementById('csn-datos').style.display = act ? '' : 'none';
+  if (!act) return 0;
+  var val = function (k) { return v(document.querySelector('#csn [data-cs="' + k + '"]')); }, nf = 0;
+  CSN_C.forEach(function (x) {
+    var cont = document.querySelector('#csn [data-csnc="' + x[0] + '"]'), e = cont && cont.querySelector('[data-cs]'), r = x[3], vis = true, req = false;
+    if (r === 'nueva') { vis = nueva; req = nueva; } else if (r === 'tipo2') { vis = tipo2 && !(ANT && ANT.cert && ANT.cert.aut); req = vis; }
+    else if (typeof r === 'string') { var pp = r.split('='); req = val(pp[0]) === pp[1]; vis = req || !!v(e); } else req = !!r;
+    if (cont) cont.style.display = vis ? '' : 'none';
+    if (vis) nf += falta(e, req);
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('#csn table.csn-eq th[data-csnh], #csn table.csn-eq td[data-csnh]'), function (c) {
+    c.style.display = (CSN_EQ_PLACA.indexOf(c.getAttribute('data-csnh')) < 0 || nueva) ? '' : 'none'; });
+  Array.prototype.forEach.call(document.querySelectorAll('#csn table.csn-eq tr[data-eqt]'), function (r) {
+    var q = function (k) { return r.querySelector('[data-ce="' + k + '"]'); }, camb = v(q('camb'));
+    nf += falta(q('coinc'), true);
+    if (camb) nf += falta(q('fcamb'), true);
+    if (nueva && ((camb && camb !== 'Baja') || csnTipo() === 'Alta (autorización nueva)')) ['serie', 'kvmax', 'mamax', 'ce', 'inst'].forEach(function (k) { nf += falta(q(k), true); });
+  });
+  var bar = nueva || val('salasc') === 'Sí'; document.getElementById('csn-barreras').style.display = bar ? '' : 'none';
+  if (bar) {
+    var filas = document.querySelectorAll('#csn table.csn-bar tbody tr');
+    if (!filas.length) { csnBarrera(); filas = document.querySelectorAll('#csn table.csn-bar tbody tr'); }
+    Array.prototype.forEach.call(filas, function (r) { ['sala', 'bar', 'uso', 'mat', 'esp'].forEach(function (k) { nf += falta(r.querySelector('[data-cb="' + k + '"]'), true); }); });
+  }
+  return nf;
+}
+function recogerCsn(todo) {
+  var s = document.getElementById('csn-tipo'); if (!s) return null;
+  var d = { tipo: v(s), tipoManual: s.getAttribute('data-manual') === '1' ? 1 : 0, equipos: [], barreras: [] };
+  if (!d.tipo) return null;
+  if (d.tipo === 'No procede en este control') return todo ? d : null;
+  CSN_C.forEach(function (x) { var e = document.querySelector('#csn [data-cs="' + x[0] + '"]'), w = v(e); if (w && (todo || e.offsetParent !== null)) d[x[0]] = w; });
+  Array.prototype.forEach.call(document.querySelectorAll('#csn table.csn-eq tr[data-eqt]'), function (r) {
+    var o = { id: r.getAttribute('data-eqid') || '' }, hay = false;
+    CSN_EQ.forEach(function (x) { var e = r.querySelector('[data-ce="' + x[0] + '"]'), w = v(e); if (w && (todo || e.offsetParent !== null)) { o[x[0]] = w; hay = true; } });
+    if (hay && o.id) d.equipos.push(o);
+  });
+  if (todo || document.getElementById('csn-barreras').style.display !== 'none') Array.prototype.forEach.call(document.querySelectorAll('#csn table.csn-bar tbody tr'), function (r) {
+    var o = {}, hay = false; CSN_BAR.forEach(function (x) { var w = v(r.querySelector('[data-cb="' + x[0] + '"]')); if (w) { o[x[0]] = w; hay = true; } });
+    if (hay) d.barreras.push(o);
+  });
+  return d;
+}
 // ---- colores y casillas que faltan (como el libro Excel)
 // ---- INFORME PROVISIONAL (13/10/2026): pruebas con los datos de la página y las tolerancias del libro Excel
 var TOL = { KV_EX: 0.10, KV_CV_INT: 0.10, KV_CV_PAN: 0.05, T_EX: 0.10, T_CV: 0.10, R_MIN: 25, R_CV: 0.10, LIM_PUB: 1, W_INT: 4, W_PAN: 200,
@@ -940,9 +1151,12 @@ function colorear() {
     if (salaSinMedir(t, true)) return;
     Array.prototype.forEach.call(t.querySelectorAll('tbody tr'), function (r) {
       if (String(r.querySelector('[data-p="eti"]').value).trim()) { conPuntos = true; nf += falta(r.querySelector('[data-p="valor"]'), true); nf += falta(r.querySelector('[data-p="uni"]'), true); }
+      if (String(r.querySelector('[data-p="valor"]').value).trim()) { var hz = v(r.querySelector('[data-p="haz"]')); nf += falta(r.querySelector('[data-p="d"]'), hz !== 'Residual'); nf += falta(r.querySelector('[data-p="df"]'), hz === 'Residual'); }   // 25/10/2026: distancias para la equivalencia en plomo
     });
     nf += falta(t.querySelector('[data-s="letra"]'), conPuntos);
   });
+  try { blqActualizar(); } catch (x) { }   // 25/10/2026: equivalencia en plomo de las barreras
+  try { nf += colorearCsn(); } catch (x) { }   // 25/10/2026: documentación para el CSN / Industria
   var est = document.getElementById('estado'), hay = document.querySelectorAll('.tarjeta.equipo, .tarjeta.sala').length;
   est.className = nf ? 'mal' : 'bien';
   est.textContent = !hay ? '' : (nf ? '⚠ Faltan ' + nf + ' dato(s) (casillas naranjas)' : '✔ Todo completo');
@@ -1024,7 +1238,7 @@ function nuevaSala() {
     '<div class="campo"><label>kVp</label>' + num('data-s="kv"') + '</div><div class="campo"><label>mA</label>' + num('data-s="ma"') + '</div>' +
     '<div class="campo"><label>t (s)</label>' + num('data-s="t"') + '</div><div class="campo"><label>d (f, p) (cm)</label>' + num('data-s="dfp"') + '</div>' +
     '<div class="campo"><label>Carga (mA·min/semana)</label>' + num('data-s="carga"') + '</div></div>' +
-    '<h3>Puntos de medida</h3><div class="tabla"><table><thead><tr><th>Punto</th><th>Etiqueta (dónde se mide, máx. 20)</th><th>Valor medido</th><th>Unidades</th><th>Tipo de haz</th><th>Factor de ocupación</th><th></th></tr></thead><tbody></tbody></table></div>' +
+    '<h3>Puntos de medida</h3><div class="tabla"><table><thead><tr><th>Punto</th><th>Etiqueta (dónde se mide, máx. 20)</th><th>Valor medido</th><th>Unidades</th><th>Tipo de haz</th><th>Factor de ocupación</th><th>Distancia maniquí → punto (m)</th><th>Distancia foco → punto (m) (haz residual)</th><th>Material de la barrera</th><th>Espesor (mm)</th><th title="Estimado con la tasa medida y el rendimiento medido del equipo (método GS 5.11)">Pb equivalente estimado (mm)</th><th></th></tr></thead><tbody></tbody></table></div>' +
     '<div class="acciones"><button type="button" onclick="nuevoPunto(\'' + id + '\')">+ punto</button></div>';
   document.getElementById('salas').appendChild(t);
   sug(t.querySelector('[data-s="funciona"]'), 'Sí');
@@ -1039,6 +1253,7 @@ function nuevoPunto(id) {
     '<td><select data-p="uni">' + opciones(['mR/h', 'µSv/h', 'mR', 'µSv'], true) + '</select></td>' +
     '<td><select data-p="haz">' + opciones(['Secundario', 'Residual', 'Fuga'], true) + '</select></td>' +
     '<td><select data-p="fo">' + opciones(['1', '1/4', '1/16'], true) + '</select></td>' +
+    '<td>' + num('data-p="d"') + '</td><td>' + num('data-p="df"') + '</td><td><select data-p="mat">' + opciones(BLQ_MAT, true) + '</select></td><td>' + num('data-p="esp"') + '</td><td class="pbeq" style="text-align:right;font-weight:600"></td>' +
     '<td><button type="button" class="quitar" onclick="quitarFila(this)">✕</button></td>';
   tb.appendChild(tr); renumerar(tb);
 }
@@ -1094,15 +1309,17 @@ function recoger(todo) {
     var sa = { letra: s('letra'), equipo: s('equipo'), funciona: s('funciona'), kv: s('kv'), ma: s('ma'), t: s('t'), dfp: s('dfp'), carga: s('carga'), puntos: [] };
     t.querySelectorAll('tbody tr').forEach(function (r, i) {
       var p = { punto: LETRAS_PUNTO[i] }, alguno = false;
-      ['eti', 'valor', 'uni', 'haz', 'fo'].forEach(function (k) { p[k] = v(r.querySelector('[data-p="' + k + '"]')); });
+      ['eti', 'valor', 'uni', 'haz', 'fo', 'd', 'df', 'mat', 'esp'].forEach(function (k) { p[k] = v(r.querySelector('[data-p="' + k + '"]')); });
+      var pq = r.querySelector('.pbeq'); p.pbeq = pq && pq.textContent !== '?' ? pq.textContent : '';   // 25/10/2026: equivalencia estimada
       alguno = todo ? !!(p.eti || p.valor || p.d) : !!p.valor;   // solo los puntos medidos
-      if (todo) { p._m = {}; ['eti', 'valor', 'uni', 'haz', 'fo'].forEach(function (k) { p._m[k] = atr(r.querySelector('[data-p="' + k + '"]')); }); }
+      if (todo) { p._m = {}; ['eti', 'valor', 'uni', 'haz', 'fo', 'd', 'df', 'mat', 'esp'].forEach(function (k) { p._m[k] = atr(r.querySelector('[data-p="' + k + '"]')); }); }
       if (alguno) sa.puntos.push(p);
     });
     if (todo) { sa._m = {}; ['letra', 'equipo', 'funciona', 'kv', 'ma', 't', 'dfp', 'carga'].forEach(function (k) { sa._m[k] = atr(t.querySelector('[data-s="' + k + '"]')); }); }
     if (sa.puntos.length || (todo && sa.letra)) d.salas.push(sa);
   });
   var pe = recogerPersonal(); if (pe) d.personal = pe;
+  var cs = recogerCsn(todo); if (cs) d.csn = cs;   // 25/10/2026: documentación para el CSN / Industria
   return d;
 }
 function aviso(txt, ok) { var a = document.getElementById('aviso'); a.className = 'aviso ' + (ok ? 'ok' : 'mal'); a.innerHTML = txt; a.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
@@ -1242,9 +1459,10 @@ function rellenarDesde(d) {
     nuevaSala(); var t = document.getElementById('sa' + nSa), tb = t.querySelector('tbody'), m = s._m || {};
     ['letra', 'equipo', 'funciona', 'kv', 'ma', 't', 'dfp', 'carga'].forEach(function (k) { var el2 = t.querySelector('[data-s="' + k + '"]'); el2.value = s[k] || ''; marcar(el2, m[k]); });
     while (tb.rows.length < (s.puntos || []).length) nuevoPunto(t.id);
-    (s.puntos || []).forEach(function (p, i) { ['eti', 'valor', 'uni', 'haz', 'fo'].forEach(function (k) { var el2 = tb.rows[i].querySelector('[data-p="' + k + '"]'); el2.value = p[k] || ''; marcar(el2, (p._m || {})[k]); }); });
+    (s.puntos || []).forEach(function (p, i) { ['eti', 'valor', 'uni', 'haz', 'fo', 'd', 'df', 'mat', 'esp'].forEach(function (k) { var el2 = tb.rows[i].querySelector('[data-p="' + k + '"]'); if (!el2) return; el2.value = p[k] || ''; marcar(el2, (p._m || {})[k]); }); });
   });
   if (!document.querySelectorAll('.tarjeta.equipo').length) nuevoEquipo();
+  pintarCsn(d.csn);
   COMPLETAR = d._completar || null;
   if (COMPLETAR) { var fe1 = document.getElementById('fecha'); fe1.value = COMPLETAR.fecha; fe1.readOnly = true; fe1.title = 'Fecha del control que se completa'; }
   colocarSalas(); aplicarTecnico(); colorear();
@@ -1302,4 +1520,5 @@ document.getElementById('tecnico').innerHTML = '<option></option>' + INSTRUMENTO
 document.getElementById('fecha').value = new Date().toISOString().slice(0, 10);
 sug(document.getElementById('ncontrol'), '1'); sug(document.getElementById('motivo'), 'Revisión anual programada');
 try { for (var kb = localStorage.length - 1; kb >= 0; kb--) { var nb = localStorage.key(kb); if (nb && nb.indexOf('cc_web_borrador_') === 0) { var ob = JSON.parse(localStorage.getItem(nb) || 'null'); if (!ob || !ob._guardado || Date.now() - new Date(ob._guardado).getTime() > 30 * 864e5) localStorage.removeItem(nb); } } } catch (e) { }
+pintarCsn();
 cargarBorrador();
